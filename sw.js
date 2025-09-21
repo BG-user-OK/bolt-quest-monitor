@@ -1,19 +1,26 @@
-self.addEventListener("install", e => {
+const CACHE = "bolt-quest-cache-v2";
+const ASSETS = [
+  "./",
+  "./index.html",
+  "./manifest.webmanifest",
+  "./icon-192.png",
+  "./icon-512.png"
+];
+
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+});
+
+self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.open("bolt-quest-cache").then(cache => {
-      return cache.addAll([
-        "./",
-        "./Bolt-quest.html",
-        "./manifest.webmanifest"
-      ]);
-    })
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => (k !== CACHE ? caches.delete(k) : null)))
+    )
   );
 });
 
-self.addEventListener("fetch", e => {
+self.addEventListener("fetch", (e) => {
   e.respondWith(
-    caches.match(e.request).then(response => {
-      return response || fetch(e.request);
-    })
+    caches.match(e.request).then((res) => res || fetch(e.request))
   );
 });
