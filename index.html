@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<link rel="manifest" href="manifest.webmanifest">
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js");
+  }
+</script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, orientation=portrait" />
+  <meta name="theme-color" content="#000000" />
+  <title>Bolt Quest Monitor</title>
+  <style>
+    :root{
+      --bg: #000;
+      --green: #10d060;
+      --green-dark: #066b34;
+      --red: #ff3b30;
+      --red-light: #ffd3d1;
+      --gold: #FFD700;
+      --text: #ffffff;
+      --grey: #2b2b2b;
+    }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    .app { position: fixed; inset: 0; display: grid; grid-template-columns: 10vw 1fr; grid-template-rows: 100%; }
+
+    .progress { position: relative; background: #1a1a1a; }
+    .progress__bar { position: absolute; left: 0; bottom: 0; width: 100%; height: 100%; background: rgba(16,208,96,0.22); transition: height 0.5s linear; }
+    .progress__label { position: absolute; left: 56%; transform: translate(-50%, -50%); white-space: nowrap; padding: 4px 6px; font-weight: 900; font-size: 4.4vw; color: var(--green); text-shadow: 0 1px 2px rgba(0,0,0,.7); pointer-events: none; top: 0; }
+
+    .panel { display: grid; grid-template-rows: 1fr 1fr 1fr; height: 100%; }
+    .section { display: flex; align-items: center; justify-content: center; padding: 8px; }
+
+    .counter { display:flex; align-items:center; justify-content:center; gap:0.02em;
+      font-weight: 900; line-height: 1; letter-spacing: 0; font-size: clamp(6vh, 12vh, 14vh); white-space: nowrap; }
+    .counter .done { color: var(--green); margin:0; }
+    .counter .sep { color: var(--gold); padding: 0 .003em; font-weight:700; }
+    .counter .req { color: var(--gold); margin:0; }
+
+    /* Środek: ogromny szary % w tle, liczba na wierzchu (większa ~50%) */
+    .accWrap { position: relative; width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; }
+    .accBack { position: absolute; font-weight: 900; color: #bdbdbd; opacity:.6; font-size: clamp(28vh, 51vh, 64vh); line-height:1; text-align:center; }
+    .accNumber { position: absolute; font-weight: 900; font-size: clamp(13vh, 24vh, 30vh); line-height: .9; text-align: center; }
+    .accNumber.ok { color: var(--green); }
+    .accNumber.bad { color: var(--red); }
+
+    .controls { gap: 10vw; padding: 2vh 4vw; justify-content: center; }
+    .btn { position: relative; flex: 0 1 auto; width: 35vw; aspect-ratio: 1; border: none; border-radius: 3vh; box-shadow: 0 8px 24px rgba(0,0,0,.45); cursor: pointer; }
+    .btn.green { background: var(--green); }
+    .btn.red { background: var(--red); }
+    .btn:active { filter: brightness(0.95); }
+
+    .btnLabel { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 900; font-size: clamp(8vh, 14vh, 16vh); text-shadow: 0 2px 6px rgba(0,0,0,.35); pointer-events: none; }
+    .btnLabel.hidden { display: none; }
+    .btnLabel.greenText { color: var(--green-dark); }
+    .btnLabel.redText { color: var(--red-light); }
+
+    .stopwatch { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.15); padding: 6px 10px; border-radius: 12px; font-weight: 900; font-size: clamp(2.8vh, 3.2vh, 3.6vh); letter-spacing: 0.5px; white-space: nowrap; backdrop-filter: blur(2px); color: #ddd; text-shadow: 0 0 4px #000; pointer-events: none; }
+    .stopwatch.hidden { display: none; }
+
+    .overlay { position: fixed; inset: 0; display: grid; align-items: start; justify-items: center; padding-top: 6vh; background: rgba(0,0,0,.88); backdrop-filter: blur(2px); }
+    .card { width: min(92vw, 520px); background: #0f0f0f; border: 1px solid #1f1f1f; border-radius: 20px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+    .wizard { display: grid; gap: 14px; }
+    .field { display: grid; gap: 6px; }
+    .select, .number { width: 100%; background: #121212; color: #fff; border: 1px solid #2a2a2a; border-radius: 12px; padding: 12px 14px; font-size: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .start-btn { margin-top: 4px; width: 100%; background: var(--green); color: #000; font-weight: 900; border: none; border-radius: 14px; padding: 14px; font-size: 18px; cursor: pointer; }
+
+    .topbar { position: fixed; right: 10px; top: 8px; display: flex; gap: 8px; z-index: 5; }
+    .iconbtn { background: #111; border: 1px solid #222; color: #ccc; padding: 8px 10px; border-radius: 12px; font-size: 12px; }
+    .iconSquare { width: 48px; height: 48px; border-radius: 10px; background: var(--grey); border: 1px solid #3a3a3a; font-size: 28px; color: #fff; display:flex; align-items:center; justify-content:center; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app" hidden>
+    <div class="progress">
+      <div class="progress__bar" id="progressBar"></div>
+      <div class="progress__label" id="progressLabel">0:00</div>
+    </div>
+
+    <div class="panel">
+      <div class="section">
+        <div class="counter">
+          <span class="done" id="done">0</span>
+          <span class="sep">/</span>
+          <span class="req" id="required">0</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="accWrap">
+          <div class="accBack">%</div>
+          <div class="accNumber bad" id="accNumber">0</div>
+        </div>
+      </div>
+
+      <div class="section controls">
+        <button class="btn green" id="btnAccept" aria-label="Przyjąłem">
+          <span class="btnLabel greenText hidden" id="labelPlus">+0</span>
+          <div class="stopwatch hidden" id="swAccept">0</div>
+        </button>
+        <button class="btn red" id="btnReject" aria-label="Odrzuciłem">
+          <span class="btnLabel redText hidden" id="labelMinus">-0</span>
+          <div class="stopwatch hidden" id="swReject">0</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="topbar" id="topbar" hidden>
+    <button class="iconSquare" id="btnUndo" title="Cofnij">↩</button>
+    <button class="iconbtn" id="btnEdit">Ustawienia</button>
+    <button class="iconbtn" id="btnReset">Reset</button>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h1>Bolt Quest – start</h1>
+      <div class="wizard">
+        <div class="row">
+          <div class="field">
+            <label for="startTime">Start</label>
+            <select class="select" id="startTime"></select>
+          </div>
+          <div class="field">
+            <label for="endTime">Koniec</label>
+            <select class="select" id="endTime"></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <input class="number" id="requiredOrders" type="number" min="1" step="1" placeholder="Zlecenia" inputmode="numeric" />
+          </div>
+          <div class="field">
+            <input class="number" id="minAcceptance" type="number" min="0" max="100" step="1" placeholder="% Akcept" inputmode="numeric" />
+          </div>
+        </div>
+        <button class="start-btn" id="btnStart">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- dźwięki -->
+  <audio id="sndOk" preload="auto" src="https://actions.google.com/sounds/v1/cartoon/pop.ogg"></audio>
+  <audio id="sndFail" preload="auto" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"></audio>
+
+  <script>
+    const STORE_KEY = 'boltQuestState.v34';
+    const $ = id => document.getElementById(id);
+    const SND_OK = () => { const a=$('sndOk'); if(a){ try{ a.currentTime=0; a.volume=1; a.play(); }catch(e){} } };
+    const SND_FAIL = () => { const a=$('sndFail'); if(a){ try{ a.currentTime=0; a.volume=1; a.play(); }catch(e){} } };
+
+    const state={startTime:null,endTime:null,requiredOrders:0,minAcceptance:0,accepted:0,rejected:0,history:[], last:{type:null, ts:null}};
+
+    function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
+    function load(){ try{ const raw = localStorage.getItem(STORE_KEY); if(raw){ Object.assign(state, JSON.parse(raw)); } }catch(e){} }
+
+    // GODZINY
+    function buildHourOptions(sel){
+      sel.innerHTML='';
+      for(let h=0; h<24; h++){
+        const hh=String(h).padStart(2,'0')+':00';
+        const opt=document.createElement('option');
+        opt.value=hh; opt.textContent=hh;
+        sel.appendChild(opt);
+      }
+    }
+    function preloadHours(){
+      const s=$('startTime'), e=$('endTime');
+      buildHourOptions(s); buildHourOptions(e);
+      s.value = state.startTime || '05:00';
+      e.value = state.endTime || '19:00';
+      $('requiredOrders').value = state.requiredOrders || 14;
+      $('minAcceptance').value = state.minAcceptance || 70;
+    }
+    function todayAt(hhmm){ if(!hhmm) return null; const [hh,mm]=hhmm.split(':').map(Number); const d=new Date(); d.setHours(hh, mm||0, 0, 0); return d; }
+
+    // PROGRESS BAR
+    function computeTimeMeta(){
+      const now=new Date();
+      const start=todayAt(state.startTime);
+      const end=todayAt(state.endTime);
+      if(!start||!end) return {remPct:100, remMs:0};
+      let realEnd=new Date(end);
+      let adjStart=new Date(start);
+      if(end<=start){ realEnd = new Date(end.getTime()+86400000); if(now<start){ adjStart.setDate(adjStart.getDate()-1); } }
+      const total=Math.max(1, realEnd - adjStart);
+      let remaining=realEnd - now;
+      if(now<adjStart) remaining=total;
+      if(now>realEnd) remaining=0;
+      const pct=Math.max(0, Math.min(100, Math.round((remaining/total)*100)));
+      return {remPct:pct, remMs:Math.max(0,remaining)};
+    }
+    function fmtHHMM(ms){
+      const totalMin=Math.max(0, Math.floor(ms/60000));
+      const hh=Math.floor(totalMin/60);
+      const mm=(totalMin%60).toString().padStart(2,'0');
+      return `${hh}:${mm}`;
+    }
+
+    // WSKAŹNIKI +/-
+    function neededAcceptsRounded(){
+      const A=state.accepted, R=state.rejected, T=Number(state.minAcceptance)||0;
+      if(T<=0) return 0;
+      const N=A+R;
+      const q = Math.max(0, Math.min(0.999999, (T - 0.5) / 100));
+      const num = q*N - A;
+      const den = 1 - q;
+      let x = Math.ceil(num/den);
+      if (!isFinite(x) || x < 0) x = 0;
+      return x;
+    }
+    function allowedRejectsRounded(){
+      const A=state.accepted, R=state.rejected, T=Number(state.minAcceptance)||0;
+      if(T<=0) return 999;
+      const q = Math.max(0, Math.min(0.999999, (T - 0.5) / 100));
+      if(q===0) return 999;
+      const y = Math.floor(A / q - (A + R));
+      return Math.max(0, y);
+    }
+    function updateIndicator(){
+      const need=neededAcceptsRounded();
+      const plus=$('labelPlus'), minus=$('labelMinus');
+      if(need>0){
+        minus.textContent='−'+need; minus.classList.remove('hidden'); plus.classList.add('hidden');
+      }else{
+        const can=allowedRejectsRounded();
+        if(can>0){ plus.textContent='+'+can; plus.classList.remove('hidden'); } else { plus.classList.add('hidden'); }
+        minus.classList.add('hidden');
+      }
+    }
+
+    // STOPER
+    function startStopwatch(type){
+      state.last = {type, ts: Date.now()};
+      const swA=$('swAccept'), swR=$('swReject');
+      if(type==='A'){ swA.classList.remove('hidden'); swR.classList.add('hidden'); }
+      else { swR.classList.remove('hidden'); swA.classList.add('hidden'); }
+      save();
+    }
+    function fmtSince(ts){
+      const diff = Math.max(0, Math.floor((Date.now()-ts)/1000));
+      const s = diff % 60;
+      if (diff < 60) return String(s);
+      const m = Math.floor((diff % 3600) / 60);
+      if (diff < 3600) return `${m}:${s}`;
+      const h = Math.floor(diff / 3600);
+      return `${h}:${m}:${s}`;
+    }
+    setInterval(()=>{
+      if(!state.last || !state.last.ts) return;
+      const val = fmtSince(state.last.ts);
+      if(state.last.type==='A') $('swAccept').textContent = val;
+      else if(state.last.type==='R') $('swReject').textContent = val;
+    }, 1000);
+
+    function updateUI(){
+      $('done').textContent=state.accepted;
+      $('required').textContent=state.requiredOrders;
+      const total=state.accepted+state.rejected;
+      const acceptedPct= total===0 ? 0 : Math.round((state.accepted/total)*100);
+      const ok = (acceptedPct>=state.minAcceptance);
+      const accNum=$('accNumber');
+      accNum.textContent=acceptedPct;
+      accNum.className='accNumber ' + (ok ? 'ok':'bad');
+
+      updateIndicator();
+
+      const meta=computeTimeMeta();
+      $('progressBar').style.height=meta.remPct+'%';
+      $('progressLabel').style.top=(100-meta.remPct)+'%';
+      $('progressLabel').textContent=fmtHHMM(meta.remMs);
+    }
+
+    // Handlers
+    function handleAccept(){ state.accepted++; state.history.push('A'); save(); updateUI(); startStopwatch('A'); SND_OK(); }
+    function handleReject(){ state.rejected++; state.history.push('R'); save(); updateUI(); startStopwatch('R'); SND_FAIL(); }
+    function handleUndo(){ const last=state.history.pop(); if(!last) return; if(last==='A'&&state.accepted>0) state.accepted--; if(last==='R'&&state.rejected>0) state.rejected--; save(); updateUI(); }
+
+    function startWithForm(){
+      state.startTime = $('startTime').value;
+      state.endTime = $('endTime').value;
+      state.requiredOrders = Math.max(1, parseInt($('requiredOrders').value||'0',10));
+      state.minAcceptance = Math.max(0, Math.min(100, parseInt($('minAcceptance').value||'0',10)));
+      save();
+      document.getElementById('overlay').style.display='none';
+      $('app').hidden=false;
+      $('topbar').hidden=false;
+      updateUI();
+      setInterval(updateUI, 1000);
+      try{ const el=document.documentElement; if(el.requestFullscreen) el.requestFullscreen(); }catch(e){};
+      try{ if('wakeLock' in navigator) navigator.wakeLock.request('screen'); }catch(e){};
+    }
+
+    (function init(){
+      load();
+      preloadHours();
+      $('btnStart').addEventListener('click', startWithForm);
+      $('btnEdit').addEventListener('click', ()=>{
+        preloadHours();
+        document.getElementById('overlay').style.display='grid';
+      });
+      $('btnReset').addEventListener('click', ()=>{
+        if(confirm('Wyzerować licznik i ustawienia?')){
+          Object.assign(state,{startTime:null,endTime:null,requiredOrders:0,minAcceptance:0,accepted:0,rejected:0,history:[], last:{type:null, ts:null}});
+          save();
+          document.getElementById('overlay').style.display='grid';
+          $('app').hidden=true;
+          $('topbar').hidden=true;
+          preloadHours();
+        }
+      });
+      $('btnAccept').addEventListener('click', handleAccept);
+      $('btnReject').addEventListener('click', handleReject);
+      $('btnUndo').addEventListener('click', handleUndo);
+
+      if(state.startTime && state.endTime && state.requiredOrders>0){
+        document.getElementById('overlay').style.display='none';
+        $('app').hidden=false;
+        $('topbar').hidden=false;
+        updateUI();
+        setInterval(updateUI, 1000);
+      }
+    })();
+  </script>
+</body>
+</html>
